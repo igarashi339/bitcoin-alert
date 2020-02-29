@@ -1,12 +1,5 @@
 const functions = require('firebase-functions');
-
-// // Create and Deploy Your First Cloud Functions
-// // https://firebase.google.com/docs/functions/write-firebase-functions
-//
-// exports.helloWorld = functions.https.onRequest((request, response) => {
-//  response.send("Hello from Firebase!");
-// });
-
+const fetch = require('node-fetch')
 const request = require('request');
 const nodemailer = require('nodemailer');
 const gmailEmail = functions.config().gmail.email
@@ -20,6 +13,8 @@ const mailTransport = nodemailer.createTransport({
     pass: gmailPassword
   }
 });
+
+メール送信関数
 exports.get = functions.pubsub.schedule('every 1 minutes').timeZone('Asia/Tokyo').onRun((context) => {
   console.log('ビットコイン価格取得開始')
   const url = 'https://bitflyer.com/api/echo/price';
@@ -42,4 +37,34 @@ exports.get = functions.pubsub.schedule('every 1 minutes').timeZone('Asia/Tokyo'
   })
   console.log('ビットコイン価格取得終了')
   return null;
+});
+
+// ビットコインの価格を取得する関数
+// 本当は毎分実行するやつにするけど、とりあえず任意のタイミングでやるやつで作成
+// exports.getBtc = functions.pubsub.schedule('every 1 minutes').timeZone('Asia/Tokyo').onRun((context) => {
+exports.getBtc = functions.https.onCall((data, context) => {
+
+  // 叩くapi
+  const url = 'https://api.cryptowat.ch/markets/bitflyer/btcfxjpy/ohlc';
+
+  // Unix timestampを取得する
+  const date = new Date();
+  const timestamp = Math.round((date.getTime() / 1000));
+
+  // パラメータを付与
+  const urlWithParam = url + '?after=' + timestamp + '&periods=' + 900;
+
+  // 実行
+  const result = (async () => {
+    try {
+      const response = await fetch(urlWithParam);
+      const json = await response.json();
+      return json;
+    } catch (error) {
+      console.log(error);
+    }
+  })();
+
+  return result;
+
 });
