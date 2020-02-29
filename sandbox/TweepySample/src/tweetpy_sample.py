@@ -20,4 +20,4 @@ auth.set_access_token(ACCESS_TOKEN, ACCESS_TOKEN_SECRET)
 api = tweepy.API(auth)
 
 #ツイートの実行
-api.update_status("ふるさと納税")
+api.update_status("テストコード")
