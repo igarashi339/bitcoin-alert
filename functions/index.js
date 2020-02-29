@@ -14,7 +14,7 @@ const mailTransport = nodemailer.createTransport({
   }
 });
 
-メール送信関数
+// メール送信関数
 exports.get = functions.pubsub.schedule('every 1 minutes').timeZone('Asia/Tokyo').onRun((context) => {
   console.log('ビットコイン価格取得開始')
   const url = 'https://bitflyer.com/api/echo/price';
