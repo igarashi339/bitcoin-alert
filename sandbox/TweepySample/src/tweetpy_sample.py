@@ -21,16 +21,4 @@ auth.set_access_token(ACCESS_TOKEN, ACCESS_TOKEN_SECRET)
 api = tweepy.API(auth)
 
 # ツイートの実行
-api.update_status("テストコード2")
-
-'''
-# おまけ1. タイムラインのツイートの取得
-public_tweets = api.home_timeline()
-for tweet in public_tweets:
-    print(tweet.text)
-
-# おまけ2. 他人のタイムラインの取得
-user_timeline = api.user_timeline("hiko_74")
-for tweet in user_timeline:
-    print(tweet.text)
-'''
+api.update_status("テストコード")
