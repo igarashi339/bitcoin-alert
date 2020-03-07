@@ -1,49 +1,17 @@
 const functions = require('firebase-functions');
 const fetch = require('node-fetch');
+const twitter = require('twitter');
+const fs = require('fs');
 
-// const request = require('request');
-// const nodemailer = require('nodemailer');
-// const gmailEmail = functions.config().gmail.email
-// const gmailPassword = functions.config().gmail.password
-// const mailTransport = nodemailer.createTransport({
-//   service: 'gmail',
-//   port: 46,
-//   secure: true,
-//   auth: {
-//     user: gmailEmail,
-//     pass: gmailPassword
-//   }
-// });
+// twitterオブジェクトの生成
+const client = new twitter(
+  JSON.parse(fs.readFileSync('config.json', 'utf-8'))
+);
 
-// // メール送信関数
-// exports.get = functions.pubsub.schedule('every 1 minutes').timeZone('Asia/Tokyo').onRun((context) => {
-//   console.log('ビットコイン価格取得開始')
-//   const url = 'https://bitflyer.com/api/echo/price';
-//   request(url, (err, response, payload) => {
-//     console.log(payload);
-
-//     console.log('メール送信開始')
-//     let email = {
-//       from: gmailEmail,
-//       to: gmailEmail,
-//       subject: 'メール送信テスト',
-//       text: payload.mid
-//     }
-//     mailTransport.sendMail(email, (err, info) => {
-//       if (err) {
-//         return console.log(err)
-//       }
-//       return console.log('メール送信終了');
-//     })
-//   })
-//   console.log('ビットコイン価格取得終了')
-//   return null;
-// });
-
-// ビットコインの価格を取得する関数
-// 本当は毎分実行するやつにするけど、とりあえず任意のタイミングでやるやつで作成
+// ビットコインの価格の急落（10%以上の値下がり）を検知したらツイートする関数
+// 本当は毎分実行するやつにするけど、とりあへず任意のタイミングでやるやつで作成
 // exports.getBtc = functions.pubsub.schedule('every 1 minutes').timeZone('Asia/Tokyo').onRun((context) => {
-exports.getBtc = functions.https.onCall((data, context) => {
+exports.alert = functions.https.onCall(async (data, context) => {
 
   // 叩くapi
   const url = 'https://api.cryptowat.ch/markets/bitflyer/btcfxjpy/ohlc';
@@ -51,12 +19,13 @@ exports.getBtc = functions.https.onCall((data, context) => {
   // Unix timestampを取得する
   const date = new Date();
   const timestamp = Math.round((date.getTime() / 1000));
+  const after = timestamp - 900;
 
   // パラメータを付与
-  const urlWithParam = url + '?after=' + timestamp + '&periods=' + 900;
+  const urlWithParam = url + '?after=' + after + '&periods=' + 900;
 
   // 実行
-  const result = (async () => {
+  const result = await (async () => {
     try {
       const response = await fetch(urlWithParam);
       const json = await response.json();
@@ -66,6 +35,61 @@ exports.getBtc = functions.https.onCall((data, context) => {
     }
   })();
 
-  return result;
+  const highPrice = result.result['900'][2];
+  const lowPrice = result.result['900'][3];
+  const threshold = highPrice * 0.1;
 
+  // 価格が急落していたら、ツイートする
+  if (highPrice - lowPrice > threshold) {
+    const text = '急落';
+    client.post('statuses/update', { status: text }, function (error, tweet, response) {
+      if (!error) {
+        console.log(tweet);
+      }
+    });
+  }
+
+  return result;
+});
+
+// 前日との価格差を取得してツイートする関数
+// 本当は毎日0:00に実行するやつにするけど、とりあへず任意のタイミングでやるやつで作成
+// exports.getDiff = functions.pubsub.schedule('00 00 * * *').timeZone('Asia/Tokyo').onRun((context) => {
+exports.getDiff = functions.https.onCall(async (data, context) => {
+
+  // 叩くapi
+  const url = 'https://api.cryptowat.ch/markets/bitflyer/btcfxjpy/ohlc';
+
+  // Unix timestampを取得する
+  const date = new Date();
+  const timestamp = Math.round(((date.getTime() - 1000 * 60 * 60 * 24) / 1000));
+  const after = timestamp - 86400;
+
+  console.log(timestamp)
+
+  // パラメータを付与
+  const urlWithParam = url + '?after=' + after + '&periods=' + 86400;
+
+  // 実行
+  const result = await (async () => {
+    try {
+      const response = await fetch(urlWithParam);
+      const json = await response.json();
+      return json;
+    } catch (error) {
+      console.log(error);
+    }
+  })();
+
+  // 価格差を計算
+  const text = '価格差';
+
+  // ツイート
+  client.post('statuses/update', { status: text }, function (error, tweet, response) {
+    if (!error) {
+      console.log(tweet);
+    }
+  });
+
+  return text;
 });
