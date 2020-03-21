@@ -98,9 +98,17 @@ exports.getDiff = functions.region('asia-northeast1').pubsub.schedule('00 8,18 *
   const time = now.toLocaleTimeString().substring(0, 5);
 
   // ツイートする内容
-  const text = `${date} ${time}の価格は${closePrice}円です。前回ツイート時との価格差は${diff}円（${prefix}${ratio}%）です。`
+  const text = `${date} ${time}の価格は${closePrice.toLocaleString()}円です。前回ツイート時との価格差は${diff.toLocaleString()}円（${prefix}${ratio}%）です。`
+  // ハッシュタグ
+  const tags = [
+    '#bitcoin',
+    '#btc',
+    '#ビットコイン'
+  ];
+  const content = text + tags.reduce((acc, cur) => acc + cur, ' ');
+
   // ツイート
-  client.post('statuses/update', { status: text }, function (error, tweet, response) {
+  client.post('statuses/update', { status: content }, function (error, tweet, response) {
     if (!error) {
       console.log(tweet);
     }
