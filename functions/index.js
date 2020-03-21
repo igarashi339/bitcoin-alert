@@ -55,15 +55,15 @@ exports.alert = functions.region('asia-northeast1').https.onCall(async (data, co
   return result;
 });
 
-// 前日との価格差を取得してツイートする関数
-exports.getDiff = functions.region('asia-northeast1').pubsub.schedule('00 00 * * *').timeZone('Asia/Tokyo').onRun(async (context) => {
+// 前回ツイート時との価格差をツイートする関数
+exports.getDiff = functions.region('asia-northeast1').pubsub.schedule('00 8,18 * * *').timeZone('Asia/Tokyo').onRun(async (context) => {
 
   // 叩くapi
   const url = 'https://api.cryptowat.ch/markets/bitflyer/btcjpy/ohlc';
 
   // Unix timestampを取得する
-  const date = new Date();
-  const timestamp = Math.round((date.getTime() / 1000));
+  const now = new Date();
+  const timestamp = Math.round((now.getTime() / 1000));
   const after = timestamp - 86400 - 3600;
 
   // パラメータを付与
@@ -80,15 +80,25 @@ exports.getDiff = functions.region('asia-northeast1').pubsub.schedule('00 00 * *
     }
   })();
 
+  // 前回ツイート時の価格が入っている配列の添字を取得
+  const index = now.toLocaleTimeString().substring(0, 2) === '08'
+    ? 14
+    : 10;
+
   // 価格差を計算
   const openPrice = result.result['3600'][0][4];
-  const closePrice = result.result['3600'][24][4];
+  const closePrice = result.result['3600'][index][4];
   const diff = closePrice - openPrice;
   // 小数第3位を四捨五入
   const ratio = Math.round((closePrice / openPrice * 100 - 100) * 100) / 100;
   const prefix = ratio > 0 ? '+' : '';
 
-  const text = `${date.toLocaleDateString()}の価格は${closePrice}円でした。前日との価格差は${diff}円（${prefix + ratio}%）でした。`
+  // 日時フォーマット
+  const date = now.toLocaleDateString();
+  const time = now.toLocaleTimeString().substring(0, 5);
+
+  // ツイートする内容
+  const text = `${date} ${time}の価格は${closePrice}円です。前回ツイート時との価格差は${diff}円（${prefix}${ratio}%）です。`
   // ツイート
   client.post('statuses/update', { status: text }, function (error, tweet, response) {
     if (!error) {
