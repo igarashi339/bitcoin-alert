@@ -62,7 +62,7 @@ exports.getDiff = functions.region('asia-northeast1').pubsub.schedule('00 8,18 *
   const url = 'https://api.cryptowat.ch/markets/bitflyer/btcjpy/ohlc';
 
   // Unix timestampを取得する
-  const now = new Date();
+  let now = new Date();
   const timestamp = Math.round((now.getTime() / 1000));
   const after = timestamp - 86400 - 3600;
 
@@ -80,6 +80,11 @@ exports.getDiff = functions.region('asia-northeast1').pubsub.schedule('00 8,18 *
     }
   })();
 
+  // 日時フォーマット
+  now.setTime(now.getTime() + 1000 * 60 * 60 * 9);
+  const jpDate = now.toLocaleDateString();
+  const jpTime = now.toLocaleTimeString().substring(0, 5);
+
   // 前回ツイート時の価格が入っている配列の添字を取得
   const index = now.toLocaleTimeString().substring(0, 2) === '08'
     ? 14
@@ -93,19 +98,15 @@ exports.getDiff = functions.region('asia-northeast1').pubsub.schedule('00 8,18 *
   const ratio = Math.round((closePrice / openPrice * 100 - 100) * 100) / 100;
   const prefix = ratio > 0 ? '+' : '';
 
-  // 日時フォーマット
-  const date = now.toLocaleDateString();
-  const time = now.toLocaleTimeString().substring(0, 5);
-
   // ツイートする内容
-  const text = `${date} ${time}の価格は${closePrice.toLocaleString()}円です。前回ツイート時との価格差は${diff.toLocaleString()}円（${prefix}${ratio}%）です。`
+  const text = `${jpDate} ${jpTime}の価格は${closePrice.toLocaleString()}円です。前回ツイート時との価格差は${diff.toLocaleString()}円（${prefix}${ratio}%）です。`
   // ハッシュタグ
   const tags = [
     '#bitcoin',
     '#btc',
     '#ビットコイン'
   ];
-  const content = text + tags.reduce((acc, cur) => acc + cur, ' ');
+  const content = text + tags.reduce((acc, cur) => acc + ' ' + cur, '');
 
   // ツイート
   client.post('statuses/update', { status: content }, function (error, tweet, response) {
