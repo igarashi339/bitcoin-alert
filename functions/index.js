@@ -13,21 +13,33 @@ const client = new twitter(
   JSON.parse(fs.readFileSync('config.json', 'utf-8'))
 );
 
-// ビットコインの価格の急落（10%以上の値下がり）を検知したらツイートする関数
-// 本当は毎分実行するやつにするけど、とりあえず任意のタイミングでやるやつで作成
-// exports.alert = functions.region('asia-northeast1').pubsub.schedule('every 1 minutes').timeZone('Asia/Tokyo').onRun(async (context) => {
-exports.alert = functions.region('asia-northeast1').https.onCall(async (data, context) => {
+// ビットコインの価格の急落（15分以内に10％以上の値下がり）を検知したらツイートする関数
+exports.alert = functions.region('asia-northeast1').pubsub.schedule('every 1 minutes').timeZone('Asia/Tokyo').onRun(async (context) => {
 
   // 叩くapi
-  const url = 'https://api.cryptowat.ch/markets/bitflyer/btcfxjpy/ohlc';
+  const url = 'https://api.cryptowat.ch/markets/bitflyer/btcjpy/ohlc';
 
   // Unix timestampを取得する
-  const date = new Date();
-  const timestamp = Math.round((date.getTime() / 1000));
-  const after = timestamp - 900;
+  let now = new Date();
+  const timestamp = Math.round((now.getTime() / 1000));
 
-  // パラメータを付与
-  const urlWithParam = url + '?after=' + after + '&periods=' + 60;
+  // アラートを出してから15分経過していなければ何もしない
+  const docRef = db.collection('alert').doc('lastTweet');
+  const snapshot = await docRef.get();
+  const timestamps = snapshot.data().timestamps;
+  const lastTimestamp = timestamps[timestamps.length - 1];
+  if (timestamp - lastTimestamp < 900) {
+    return null;
+  }
+
+  // 15分前から（微調整用に少しプラス）
+  const after = timestamp - 900 - 60;
+  // 現在までを
+  const before = timestamp;
+  // 1分毎に
+  const period = 60;
+  // 取得する
+  const urlWithParam = url + '?after=' + after + '&before' + before + '&periods=' + period;
 
   // 実行
   const result = await (async () => {
@@ -40,24 +52,47 @@ exports.alert = functions.region('asia-northeast1').https.onCall(async (data, co
     }
   })();
 
-  const prices = result.result['60'].filter((v, index) => index !== 15);
-
-  const max = Math.max.apply(null, prices.map(v => v[2]));
-  const min = Math.min.apply(null, prices.map(v => v[3]));
-  const decline = (max - min) / max * 100;
-  const threshold = 15;
+  const prices = result.result['60'];
+  // 現在の価格
+  const priceCur = prices[prices.length - 1][4];
+  // 15分間の間の最大価格
+  const priceMax = Math.max.apply(null, prices.map(v => v[2]));
+  // 下落率
+  const decline = priceMax > priceCur ? (priceMax - priceCur) / priceMax * 100 : 0;
+  // 閾値
+  const threshold = 10;
 
   // 価格が急落していたら、ツイートする
   if (decline > threshold) {
-    const text = '急落';
-    client.post('statuses/update', { status: text }, function (error, tweet, response) {
+    
+    // 日時フォーマット
+    now.setTime(now.getTime() + 1000 * 60 * 60 * 9);
+    const jpDate = now.toLocaleDateString();
+    const jpTime = now.toLocaleTimeString().substring(0, 5);
+
+    // ツイート本文
+    const text = `ビットコインの価格が急落しています！（${jpDate} ${jpTime}、${decline}%）`;
+    // ハッシュタグ
+    const tags = [
+      '#bitcoin',
+      '#btc',
+      '#ビットコイン'
+    ];
+    const content = text + tags.reduce((acc, cur) => acc + ' ' + cur, '');
+
+    client.post('statuses/update', { status: content }, function (error, tweet, response) {
       if (!error) {
         console.log(tweet);
       }
     });
+
+    //アラートした時刻を更新
+    await docRef.update({
+      timestamps: admin.firestore.FieldValue.arrayUnion(timestamp)
+    });
   }
 
-  return result;
+  return null;
 });
 
 // 前回ツイート時との価格差をツイートする関数
