@@ -2,6 +2,11 @@ const functions = require('firebase-functions');
 const fetch = require('node-fetch');
 const twitter = require('twitter');
 const fs = require('fs');
+const admin = require('firebase-admin');
+
+// Cloud Frestoreの初期化
+admin.initializeApp(functions.config().firebase);
+const db = admin.firestore();
 
 // twitterオブジェクトの生成
 const client = new twitter(
@@ -9,7 +14,7 @@ const client = new twitter(
 );
 
 // ビットコインの価格の急落（10%以上の値下がり）を検知したらツイートする関数
-// 本当は毎分実行するやつにするけど、とりあへず任意のタイミングでやるやつで作成
+// 本当は毎分実行するやつにするけど、とりあえず任意のタイミングでやるやつで作成
 // exports.alert = functions.region('asia-northeast1').pubsub.schedule('every 1 minutes').timeZone('Asia/Tokyo').onRun(async (context) => {
 exports.alert = functions.region('asia-northeast1').https.onCall(async (data, context) => {
 
@@ -59,20 +64,12 @@ exports.alert = functions.region('asia-northeast1').https.onCall(async (data, co
 exports.getDiff = functions.region('asia-northeast1').pubsub.schedule('00 8,18 * * *').timeZone('Asia/Tokyo').onRun(async (context) => {
 
   // 叩くapi
-  const url = 'https://api.cryptowat.ch/markets/bitflyer/btcjpy/ohlc';
-
-  // Unix timestampを取得する
-  let now = new Date();
-  const timestamp = Math.round((now.getTime() / 1000));
-  const after = timestamp - 86400 - 3600;
-
-  // パラメータを付与
-  const urlWithParam = url + '?after=' + after + '&periods=' + 3600;
+  const url = 'https://api.cryptowat.ch/markets/bitflyer/btcjpy/price';
 
   // 実行
   const result = await (async () => {
     try {
-      const response = await fetch(urlWithParam);
+      const response = await fetch(url);
       const json = await response.json();
       return json;
     } catch (error) {
@@ -80,26 +77,30 @@ exports.getDiff = functions.region('asia-northeast1').pubsub.schedule('00 8,18 *
     }
   })();
 
+  // 現在の価格
+  const price = result.result.price;
+
+  // 前回ツイート時の価格をFirestoreから取得
+  const docRef = db.collection('tweet').doc('prevPrice');
+  const snapshot = await docRef.get();
+  const prevPrice = snapshot.data().price;
+
+  // Firostoreの価格を更新
+  await docRef.set({ price: price });
+
+  // 価格差を計算
+  const diff = price - prevPrice;
+  const ratio = Math.round(diff / prevPrice * 100 * 100) / 100;
+  const prefix = ratio > 0 ? '+' : '';
+
   // 日時フォーマット
+  let now = new Date();
   now.setTime(now.getTime() + 1000 * 60 * 60 * 9);
   const jpDate = now.toLocaleDateString();
   const jpTime = now.toLocaleTimeString().substring(0, 5);
 
-  // 前回ツイート時の価格が入っている配列の添字を取得
-  const index = now.toLocaleTimeString().substring(0, 2) === '08'
-    ? 14
-    : 10;
-
-  // 価格差を計算
-  const openPrice = result.result['3600'][0][4];
-  const closePrice = result.result['3600'][index][4];
-  const diff = closePrice - openPrice;
-  // 小数第3位を四捨五入
-  const ratio = Math.round((closePrice / openPrice * 100 - 100) * 100) / 100;
-  const prefix = ratio > 0 ? '+' : '';
-
-  // ツイートする内容
-  const text = `${jpDate} ${jpTime}の価格は${closePrice.toLocaleString()}円です。前回ツイート時との価格差は${diff.toLocaleString()}円（${prefix}${ratio}%）です。`
+  // ツイート本文
+  const text = `${jpDate} ${jpTime}の価格は${price.toLocaleString()}円です。前回ツイート時との価格差は${diff.toLocaleString()}円（${prefix}${ratio}%）です。`;
   // ハッシュタグ
   const tags = [
     '#bitcoin',
@@ -115,5 +116,5 @@ exports.getDiff = functions.region('asia-northeast1').pubsub.schedule('00 8,18 *
     }
   });
 
-  return { data: result, text: text };
+  return null;
 });
