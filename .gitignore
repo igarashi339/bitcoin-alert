@@ -5,3 +5,6 @@
 # API key情報が載っているファイルは無視
 /sandbox/TweepySample/config.json
 /functions/config.json
+
+# 出力データの場所なので無視
+sandbox/AnalysisOfGoldenCross/data
