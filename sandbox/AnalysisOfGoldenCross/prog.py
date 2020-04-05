@@ -1,8 +1,3 @@
-'''
-cryptowatのAPIを用いて現在までのBitcoinの価格を取得し、CSVファイルに吐き出す。
-ドキュメント：https://docs.cryptowat.ch/rest-api/
-'''
-
 import requests
 import json
 import codecs
