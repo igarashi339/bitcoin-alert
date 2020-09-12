@@ -15,7 +15,7 @@
     "firebase-admin": "^8.6.0",
     "firebase-functions": "^3.3.0",
     "fs": "0.0.1-security",
-    "node-fetch": "^2.6.0",
+    "node-fetch": "^2.6.1",
     "nodemailer": "^6.4.2",
     "twitter": "^1.7.1"
   },
